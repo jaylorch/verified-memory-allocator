@@ -621,7 +621,7 @@ impl LL {
             tracked_swap(self.perms.borrow_mut(), &mut self_map);
 
             let key_map = Map::<nat, nat>::new(
-                    |i: nat| self_len <= i < self_len + other_len,
+                    Set::range(self_len, self_len + other_len),
                     |i: nat| (i - self_len) as nat,
                 );
             assert forall|j| key_map.dom().contains(j) implies other_map.dom().contains(key_map.index(j))
@@ -1061,7 +1061,7 @@ impl LL {
                     && block_token.key().block_size == block_size
               }))
         ensures
-            m2.len() == len, m2.dom().finite(),
+            m2.len() == len,
             forall |i: nat| (#[trigger] m2.dom().contains(i) <==> 0 <= i < len)
               && (m2.dom().contains(i) ==> ({
                   let (padding, block_token) = m2[i];
@@ -1121,7 +1121,7 @@ impl LL {
             ts.value().pages.dom().contains(llgstr1.page_id),
             ts.value().pages[llgstr1.page_id].num_blocks == n_blocks,
         ensures ({ let (points_to, map) = res; {
-            &&& map.dom().finite() && map.len() == n_blocks
+            &&& map.len() == n_blocks
             &&& (forall |block_id| map.dom().contains(block_id) ==>
                     block_id.page_id == llgstr1.page_id)
             &&& (forall |block_id| map.dom().contains(block_id) ==>
@@ -1135,7 +1135,7 @@ impl LL {
     {
         let tracked llgstr = Self::llgstr_merge(llgstr1, llgstr2);
         let idxmap = Map::<nat, nat>::new(
-            |p| llgstr.map.dom().contains(p),
+            llgstr.map.dom(),
             |p| llgstr.map[p].1.key().idx);
         if exists |p| llgstr.map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
             let p = choose |p| llgstr.map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks);
@@ -1181,7 +1181,7 @@ impl LL {
         let tracked LLGhostStateToReconvene { map: mut map1, .. } = llgstr1;
         let tracked LLGhostStateToReconvene { map: mut map2, .. } = llgstr2;
         map2.tracked_map_keys_in_place(Map::<nat, nat>::new(
-            |k: nat| map1.len() <= k < map1.len() + map2.len(),
+            Set::range(map1.len(), map1.len() + map2.len()),
             |k: nat| (k - map1.len()) as nat,
         ));
         map1.tracked_union_prefer_right(map2);
@@ -1252,7 +1252,7 @@ impl LL {
                         && block_token.key().block_size == block_size
                   })),
         ensures ({ let (points_to, map) = res; {
-            &&& map.dom().finite() && map.len() == len
+            &&& map.len() == len
             &&& (forall |block_id| map.dom().contains(block_id) ==>
                     block_id.page_id == page_id)
             &&& (forall |block_id| map.dom().contains(block_id) ==>
@@ -1304,14 +1304,13 @@ pub closed spec fn has_idx(map: Map<nat, (PointsToRaw, Mim::block)>, i: nat) -> 
 }
 
 pub open spec fn set_nat_range(lo: nat, hi: nat) -> Set<nat> {
-    Set::new(|i: nat| lo <= i && i < hi)
+    Set::range(lo, hi)
 }
 
 pub proof fn lemma_nat_range(lo: nat, hi: nat)
     requires
         lo <= hi,
     ensures
-        set_nat_range(lo, hi).finite(),
         set_nat_range(lo, hi).len() == hi - lo,
     decreases
         hi - lo,
@@ -1405,7 +1404,7 @@ pub fn bound_on_2_lists(
             let tracked LLGhostStateToReconvene { map: mut map, .. } = llgstr;
 
             let idxmap = Map::<nat, nat>::new(
-                |p| map.dom().contains(p),
+                map.dom(),
                 |p| map[p].1.key().idx);
             if exists |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
                 let p = choose |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks);
@@ -1462,7 +1461,7 @@ pub fn bound_on_1_lists(
             let tracked mut map = LL::convene_pt_map(m, len, instance, page_id, block_size);
 
             let idxmap = Map::<nat, nat>::new(
-                |p| map.dom().contains(p),
+                map.dom(),
                 |p| map[p].1.key().idx);
             if exists |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
                 let p = choose |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks);

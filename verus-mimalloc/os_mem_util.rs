@@ -206,9 +206,13 @@ impl Local {
     }
 
     pub closed spec fn segment_pages_range_total(&self, segment_id: SegmentId) -> Set<int> {
-        Set::<int>::new(|addr| exists |page_id|
-            self.segment_page_range(segment_id, page_id).contains(addr)
-        )
+        self.page_organization.pages.dom().map(
+            |page_id| self.segment_page_range(segment_id, page_id)
+        ).flatten()
+// The following old way of building the set isn't evidently finite:
+//        Set::<int>::new(|addr| exists |page_id|
+//            self.segment_page_range(segment_id, page_id).contains(addr)
+//        )
     }
 
     spec fn segment_page_used(&self, segment_id: SegmentId, page_id: PageId) -> Set<int> {
@@ -223,9 +227,13 @@ impl Local {
     }
 
     pub closed spec fn segment_pages_used_total(&self, segment_id: SegmentId) -> Set<int> {
-        Set::<int>::new(|addr| exists |page_id|
-            self.segment_page_used(segment_id, page_id).contains(addr)
-        )
+        self.page_organization.pages.dom().map(
+            |page_id| self.segment_page_used(segment_id, page_id)
+        ).flatten()
+// The following old way of building the set isn't evidently finite:
+//        Set::<int>::new(|addr| exists |page_id|
+//            self.segment_page_used(segment_id, page_id).contains(addr)
+//        )
     }
 
     /*spec fn segment_page_range_reserved(&self, segment_id: SegmentId, page_id: PageId) -> Set<int> {

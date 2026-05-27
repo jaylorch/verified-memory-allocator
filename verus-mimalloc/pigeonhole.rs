@@ -9,7 +9,6 @@ verus!{
 // TODO: This belongs in set_lib
 proof fn singleton_set_unique_elt<T>(s: Set<T>, a:T, b:T)
     requires
-        s.finite(),
         s.len() == 1,
         s.contains(a),
         s.contains(b),
@@ -25,8 +24,6 @@ proof fn singleton_set_unique_elt<T>(s: Set<T>, a:T, b:T)
 
 proof fn set_mismatch(s1:Set<nat>, s2:Set<nat>, missing:nat)
     requires
-        s1.finite(),
-        s2.finite(),
         s1.len() == s2.len(),
         forall |elt| s2.contains(elt) ==> s1.contains(elt),
         s1.contains(missing),
@@ -56,7 +53,7 @@ proof fn set_mismatch(s1:Set<nat>, s2:Set<nat>, missing:nat)
 
 /// Creates a finite set of nats in the range [lo, hi).
 pub open spec fn set_nat_range(lo: nat, hi: nat) -> Set<nat> {
-    Set::new(|i: nat| lo <= i && i < hi)
+    Set::range(lo, hi)
 }
 
 /// If a set solely contains nats in the range [a, b), then its size is
@@ -65,7 +62,6 @@ pub proof fn lemma_nat_range(lo: nat, hi: nat)
     requires
         lo <= hi,
     ensures
-        set_nat_range(lo, hi).finite(),
         set_nat_range(lo, hi).len() == hi - lo,
     decreases
         hi - lo,
@@ -83,7 +79,6 @@ proof fn nat_set_size(s:Set<nat>, bound:nat)
     requires
         forall |i: nat| (0 <= i < bound <==> s.contains(i)),
     ensures
-        s.finite(),
         s.len() == bound,
 {
     let nats = set_nat_range(0, bound);
@@ -108,7 +103,6 @@ pub proof fn pigeonhole_missing_idx_implies_double_helper(
         )),
         0 <= missing < len,
         0 <= k < len,
-        prev_vals.finite(),
         prev_vals.len() == k,
         //forall |j| 0 <= j < k ==> #[trigger] prev_vals.contains(m[j]),
         forall |elt| #[trigger] prev_vals.contains(elt) ==> exists |j| 0 <= j < k && m[j] == elt,

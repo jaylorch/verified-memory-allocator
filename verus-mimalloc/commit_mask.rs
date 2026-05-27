@@ -3,6 +3,7 @@ use crate::config::*;
 use crate::tokens::*;
 use crate::layout::*;
 use crate::types::*;
+use vstd::contrib::set_build;
 use vstd::set_lib::set_int_range;
 
 verus!{
@@ -193,12 +194,16 @@ pub struct CommitMask {
     mask: [usize; 8],     // size = COMMIT_MASK_FIELD_COUNT
 }
 
+// {(x, y) | 0 <= x < 8 && y < 64}
+spec fn set_8_64() -> Set<(int, usize)> {
+    set_build!{ (x, y): (int, usize) | x: int in 0..8, y: usize in 0..64 }
+}
+
 impl CommitMask {
     pub closed spec fn view(&self) -> Set<int> {
-        Set::new(|t: (int, usize)|
-                 0 <= t.0 < 8 && t.1 < 64
-                 && is_bit_set(self.mask[t.0], t.1)
-        ).map(|t: (int, usize)| t.0 * 64 + t.1)
+        set_8_64()
+            .filter(|t: (int, usize)| is_bit_set(self.mask[t.0], t.1))
+            .map(|t: (int, usize)| t.0 * 64 + t.1)
     }
 
     proof fn lemma_view(&self)
@@ -217,9 +222,9 @@ impl CommitMask {
         assert forall|a: int, b: usize| 0 <= a < 8 && b < 64 && is_bit_set(self.mask[a], b)
             implies self@.contains(a * 64 + b)
         by {
-            assert(Set::new(|t: (int, usize)|
-                     0 <= t.0 < 8 && t.1 < 64
-                     && is_bit_set(self.mask[t.0], t.1)
+            assert(
+                set_8_64()
+                    .filter(|t: (int, usize)| is_bit_set(self.mask[t.0], t.1)
             ).contains((a, b))) by (nonlinear_arith)
                 requires 0 <= a < 8 && b < 64 && is_bit_set(self.mask[a], b);
         }
@@ -227,10 +232,11 @@ impl CommitMask {
 
     #[verifier::opaque]
     pub open spec fn bytes(&self, segment_id: SegmentId) -> Set<int> {
-        Set::<int>::new(|addr: int|
-            self@.contains(
-                (addr - segment_start(segment_id)) / COMMIT_SIZE as int
-            )
+        // {addr | self@.contains((addr - segment_start(segment_id)) / COMMIT_SIZE)}
+        let start = segment_start(segment_id);
+        self@.map_flatten_by(
+            |i: int| Set::range(start + i * COMMIT_SIZE, start + (i + 1) * COMMIT_SIZE),
+            |addr: int| (addr - start) / COMMIT_SIZE as int,
         )
     }
 
@@ -372,17 +378,17 @@ impl CommitMask {
             forall|j: int| 0 <= j < i ==> other.mask[j] == self.mask[j],
             forall|j: int| i < j < 8 ==> other.mask[j] == self.mask[j],
         ensures
-            other@ == self@.union(Set::new(|b: usize| b < 64 && is_bit_set(other.mask[i], b)).map(|b: usize| 64 * i + b)),
+            other@ == self@.union(Set::range(0, 64).filter(|b: usize| is_bit_set(other.mask[i], b)).map(|b: usize| 64 * i + b)),
     {
-        let s_un = Set::new(|b: usize| b < 64 && is_bit_set(other.mask[i], b));
+        let s_un = Set::range(0, 64).filter(|b: usize| b < 64 && is_bit_set(other.mask[i], b));
         let f_un = |b: usize| 64 * i + b;
         let f = |t: (int, usize)| t.0 * 64 + t.1;
-        let s_full = Set::new(|t: (int, usize)| 0 <= t.0 < 8 && t.1 < 64 && is_bit_set(self.mask[t.0], t.1));
-        let s_full_o = Set::new(|t: (int, usize)| 0 <= t.0 < 8 && t.1 < 64 && is_bit_set(other.mask[t.0], t.1));
-        let s1 = Set::new(|t: (int, usize)| 0 <= t.0 < i && t.1 < 64 && is_bit_set(self.mask[t.0], t.1));
-        let s2 = Set::new(|t: (int, usize)| t.0 == i && t.1 < 64 && is_bit_set(self.mask[i], t.1));
-        let s2o = Set::new(|t: (int, usize)| t.0 == i && t.1 < 64 && is_bit_set(other.mask[i], t.1));
-        let s3 = Set::new(|t: (int, usize)| i <  t.0 < 8 && t.1 < 64 && is_bit_set(self.mask[t.0], t.1));
+        let s_full = set_8_64().filter(|t: (int, usize)| is_bit_set(self.mask[t.0], t.1));
+        let s_full_o = set_8_64().filter(|t: (int, usize)| is_bit_set(other.mask[t.0], t.1));
+        let s1 = set_8_64().filter(|t: (int, usize)| 0 <= t.0 < i && is_bit_set(self.mask[t.0], t.1));
+        let s2 = set_8_64().filter(|t: (int, usize)| t.0 == i && is_bit_set(self.mask[i], t.1));
+        let s2o = set_8_64().filter(|t: (int, usize)| t.0 == i && is_bit_set(other.mask[i], t.1));
+        let s3 = set_8_64().filter(|t: (int, usize)| i < t.0 && is_bit_set(self.mask[t.0], t.1));
         assert(s_full =~= s1.union(s2).union(s3));
         assert(s2 =~= Set::empty()) by { lemma_is_bit_set(); }
         lemma_map_distribute_auto::<(int,usize),int>();
@@ -393,7 +399,7 @@ impl CommitMask {
         };
         assert forall|x| #![auto] s2o.map(f).contains(x) implies s_un.map(f_un).contains(x) by {
             let y = choose|y| s2o.contains(y) && f(y) == x;
-            assert(Set::new(|b: usize| b < 64 && is_bit_set(other.mask[i], b)).contains(y.1));
+            assert(Set::range(0, 64).filter(|b: usize| b < 64 && is_bit_set(other.mask[i], b)).contains(y.1));
         };
         assert(s_un.map(f_un) =~= s2o.map(f));
     }
@@ -402,7 +408,7 @@ impl CommitMask {
         requires
             idx + count <= COMMIT_MASK_BITS,
             old(self)@ == Set::<int>::empty(),
-        ensures self@ == Set::new(|i: int| idx <= i < idx + count),
+        ensures self@ == Set::range(idx as int, idx + count),
     {
         proof {
             const_facts();
@@ -418,15 +424,15 @@ impl CommitMask {
         if count == COMMIT_MASK_BITS as usize {
             self.create_full();
         } else if count == 0 {
-            assert(self@ =~= Set::new(|i: int| idx <= i < idx + count));
+            assert(self@ =~= Set::range(idx as int, idx + count));
         } else {
             let mut i = idx / usize::BITS as usize;
             let mut ofs: usize = idx % usize::BITS as usize;
             let mut bitcount = count;
-            assert(Set::new(|j: int| idx <= j < idx + (count - bitcount)) =~= Set::empty());
+            assert(Set::range(idx as int, idx + (count - bitcount)) =~= Set::empty());
             while bitcount > 0
                 invariant
-                    self@ == Set::new(|j: int| idx <= j < idx + (count - bitcount)),
+                    self@ == Set::range(idx as int, idx + (count - bitcount)),
                     ofs == if count == bitcount { idx % 64 } else { 0 },
                     bitcount > 0 ==> 64 * i + ofs == idx + (count - bitcount),
                     idx + count <= 512,
@@ -460,80 +466,80 @@ impl CommitMask {
                     let oofs = oofs@;
                     lemma_is_bit_set();
                     old_self@.lemma_change_one_entry(self, oi as int);
-                    assert(self@ == old_self@@.union(Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b)));
+                    assert(self@ == old_self@@.union(Set::range(0, 64). filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b)));
                     // TODO: a lot of duplicated proof structure here, should be able to
                     // somehow lift that structure out of the if-else
                     if oofs > 0 { // first iteration
-                        assert(Set::new(|j: int| idx <= j < idx + (count - bitcount))
-                               =~= Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount)));
+                        assert(Set::range(idx as int, idx + (count - bitcount))
+                               =~= Set::range(idx + (count - obc), idx + (count - bitcount)));
                         if obc < 64 {
                             assert(mask == sub(1usize << c, 1usize) << oofs);
                             lemma_bitmask_to_is_bit_set(c, oofs);
-                            assert(Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount))
-                                   =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
+                            assert(Set::range(idx + (count - obc), idx + (count - bitcount))
+                                   =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
                             by {
-                                let s1 = Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount));
-                                let s2 = Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
+                                let s1 = Set::range(idx + (count - obc), idx + (count - bitcount));
+                                let s2 = Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
                                 assert(forall|j: usize| idx + (count - obc) <= j < idx + (count - bitcount) ==> #[trigger] is_bit_set(self.mask[oi as int], mod64(j)));
                                 assert forall|x: int| s1.contains(x) implies s2.contains(x) by {
                                     let b = x % 64;
-                                    assert(Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
+                                    assert(Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
                                 }
                             }
-                            assert(Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount))
-                                   =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
+                            assert(Set::range(idx + (count - obc), idx + (count - bitcount))
+                                   =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
                         } else {
                             assert(mask == sub(1usize << sub(64usize, oofs), 1usize) << oofs);
                             lemma_bitmask_to_is_bit_set(sub(64, oofs), oofs);
-                            assert(Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount))
-                                   =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
+                            assert(Set::range(idx + (count - obc), idx + (count - bitcount))
+                                   =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
                             by {
-                                let s1 = Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount));
-                                let s2 = Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
+                                let s1 = Set::range(idx + (count - obc), idx + (count - bitcount));
+                                let s2 = Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
                                 assert forall|x: int| s1.contains(x) implies s2.contains(x) by { // unstable
-                                    assert(Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
+                                    assert(Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
                                 }
                             }
-                            assert(Set::new(|j: int| idx + (count - obc) <= j < idx + (count - bitcount))
-                                   =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
+                            assert(Set::range(idx + (count - obc), idx + (count - bitcount))
+                                   =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
                         }
                     } else if obc < 64 { // last iteration
-                        assert(Set::new(|j: int| idx <= j < idx + (count - bitcount))
-                               =~= Set::new(|j: int| idx <= j < idx + (count - obc))
-                                   .union(Set::new(|j: int| idx + (count - obc) <= j < idx + count)));
+                        assert(Set::range(idx as int, idx + (count - bitcount))
+                               =~= Set::range(idx as int, idx + (count - obc))
+                                   .union(Set::range(idx + (count - obc), idx + count)));
                         assert(mask == (1usize << obc) - 1usize);
                         lemma_bitmask_to_is_bit_set(obc, 0);
-                        assert(Set::new(|j: int| idx + (count - obc) <= j < idx + count)
-                               =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
+                        assert(Set::range(idx + (count - obc), idx + count)
+                               =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
                         by {
-                            let s1 = Set::new(|j: int| idx + (count - obc) <= j < idx + count);
-                            let s2 = Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
+                            let s1 = Set::range(idx + (count - obc), idx + count);
+                            let s2 = Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
                             assert forall|x: int| s1.contains(x) implies s2.contains(x) by {
-                                assert(Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
+                                assert(Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
                             }
                         }
-                        assert(Set::new(|j: int| idx + (count - obc) <= j < idx + count)
-                               =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
+                        assert(Set::range(idx + (count - obc), idx + count)
+                               =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
                     } else {
-                        assert(Set::new(|j: int| idx <= j < idx + (count - bitcount))
-                               =~= Set::new(|j: int| idx <= j < idx + (count - obc))
-                                   .union(Set::new(|j: int| idx + (count - obc) <= j < idx + (count - obc) + 64)));
+                        assert(Set::range(idx as int, idx + (count - bitcount))
+                               =~= Set::range(idx as int, idx + (count - obc))
+                                   .union(Set::range(idx + (count - obc), idx + (count - obc) + 64)));
                         assert(mask == !0usize);
-                        let new = Set::new(|j: int| idx + (count - obc) <= j < idx + (count - obc) + 64);
-                        assert(Set::new(|j: int| 64 * oi <= j < 64 * oi + 64)
-                               =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
+                        let new = Set::range(idx + (count - obc), idx + (count - obc) + 64);
+                        assert(Set::range(64 * oi, 64 * oi + 64)
+                               =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b))
                         by {
-                            let s1 = Set::new(|j: int| 64 * oi <= j < 64 * oi + 64);
-                            let s2 = Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
+                            let s1 = Set::range(64 * oi, 64 * oi + 64);
+                            let s2 = Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b);
                             assert forall|x: int| s1.contains(x) implies s2.contains(x) by {
-                                assert(Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
+                                assert(Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).contains((x % 64) as usize));
                             }
                         }
-                        assert(Set::new(|j: int| 64 * oi <= j < 64 * oi + 64)
-                               =~= Set::new(|b: usize| b < 64 && is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
+                        assert(Set::range(64 * oi, 64 * oi + 64)
+                               =~= Set::range(0, 64).filter(|b: usize| is_bit_set(self.mask[oi as int], b)).map(|b: usize| 64 * oi + b));
                     }
                 }
-                assert(self@ =~= Set::new(|j: int| idx <= j < idx + (count - bitcount)));
+                assert(self@ =~= Set::range(idx as int, idx + (count - bitcount)));
             }
         }
     }
@@ -556,7 +562,7 @@ impl CommitMask {
     }
 
     pub fn create_full(&mut self)
-        ensures self@ == Set::new(|i: int| 0 <= i < COMMIT_MASK_BITS),
+        ensures self@ == Set::range(0, COMMIT_MASK_BITS as int),
     {
         let mut i = 0;
         while i < 8
@@ -569,14 +575,13 @@ impl CommitMask {
             const_facts();
             lemma_is_bit_set();
             self.lemma_view();
-            let seq_set = Set::new(|i: int| 0 <= i < COMMIT_MASK_BITS);
-            let bit_set = Set::new(|t: (int, int)| 0 <= t.0 < 8 && 0 <= t.1 < 64)
-                   .map(|t: (int, int)| t.0 * 64 + t.1);
+            let seq_set = Set::range(0, COMMIT_MASK_BITS as int);
+            let bit_set = set_8_64().map(|t: (int, usize)| t.0 * 64 + t.1);
             assert forall|i: int| seq_set.contains(i) implies bit_set.contains(i) by {
-                assert(Set::new(|t: (int, int)| 0 <= t.0 < 8 && 0 <= t.1 < 64).contains((i / 64, i % 64)));
+                assert(set_8_64().contains((i / 64, i as usize % 64)));
             }
             assert(seq_set =~= bit_set);
-            assert(self@ =~= Set::new(|i: int| 0 <= i < COMMIT_MASK_BITS));
+            assert(self@ =~= Set::range(0, COMMIT_MASK_BITS as int));
         }
     }
 
@@ -735,7 +740,7 @@ impl CommitMask {
     }
 
     pub fn is_full(&self) -> (b: bool)
-    ensures b == (self@ == Set::new(|i: int| 0 <= i < COMMIT_MASK_BITS))
+    ensures b == (self@ == Set::range(0, COMMIT_MASK_BITS as int))
     {
         let mut i = 0;
         while i < 8
@@ -769,7 +774,7 @@ impl CommitMask {
                 assert(0 <= u < 64);
                 assert(self@.contains(t * 64 + u));
             }
-            assert(self@ =~= Set::new(|i: int| 0 <= i < COMMIT_MASK_BITS));
+            assert(self@ =~= Set::range(0, COMMIT_MASK_BITS as int));
         }
         return true;
     }

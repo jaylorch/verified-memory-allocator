@@ -301,7 +301,7 @@ fn page_free_list_extend(
     proof { local.thread_token = _thread_token; local.checked_token = _checked_token; }
     let tracked mut block_tokens = Map::tracked_map_keys(block_tokens,
         Map::<int, BlockId>::new(
-          |i: int| cap_nat <= i < cap_nat + extend_nat,
+          Set::range(cap_nat as int, cap_nat as int + extend_nat),
           |i: int| BlockId {
               page_id: page_ptr.page_id@,
               idx: i as nat,

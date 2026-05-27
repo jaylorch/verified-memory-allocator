@@ -1819,7 +1819,7 @@ fn segment_page_clear(page: PagePtr, tld: TldPtr, Tracked(local): Tracked<&mut L
     proof {
         let tracked thread_state_tok = local.take_thread_token();
         let block_state_map = Map::new(
-            |block_id: BlockId| block_tokens.dom().contains(block_id),
+            block_tokens.dom(),
             |block_id: BlockId| block_tokens[block_id].value(),
         );
         assert(block_state_map.dom() =~= block_tokens.dom());
@@ -1960,6 +1960,23 @@ fn segment_page_clear(page: PagePtr, tld: TldPtr, Tracked(local): Tracked<&mut L
 
         assert(page_organization_pages_match(local.page_organization.pages, local.pages, local.psa));
         assert(local.page_organization_valid());*/
+
+        // HACK: maybe this assertion from wf_main ...
+        assert({
+                &&& (forall |page_id: PageId| #[trigger] local.page_organization.pages.dom().contains(page_id) ==>
+                    (!local.page_organization.pages[page_id].is_used <==> local.unused_pages.dom().contains(page_id)))
+        });
+        // ... helps prove this assertion from wf_main:
+        assert({
+                &&& (forall |page_id| 
+                  #[trigger] local.page_organization.pages.dom().contains(page_id)
+                    ==> local.page_organization.pages[page_id].is_used
+                    ==> page_organization_matches_token_page(
+                            local.page_organization.pages[page_id],
+                            local.thread_token.value().pages[page_id]))
+        });
+        // or it's some other flakiness
+
         assert(local.wf_main());
     }
 

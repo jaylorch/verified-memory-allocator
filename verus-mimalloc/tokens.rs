@@ -54,9 +54,10 @@ pub ghost struct BlockId {
 
 impl PageId {
     pub open spec fn range_from(&self, lo: int, hi: int) -> Set<PageId> {
-        Set::new(
-            |page_id: PageId| page_id.segment_id == self.segment_id
-              && self.idx + lo <= page_id.idx < self.idx + hi
+        // {page_id | page_id.segment_id == self.segment_id && self.idx + lo <= page_id.idx < self.idx + hi}
+        Set::range(self.idx + lo, self.idx + hi).map_by(
+            |idx: int| PageId { segment_id: self.segment_id, idx: idx as nat },
+            |page_id: PageId| page_id.idx as int,
         )
     }
 }
@@ -205,7 +206,7 @@ pub type ThreadId = crate::thread::ThreadId;
 // PAPER CUT: doing this more than once, no generic finite condition for map,
 // having to do the maximum thing
 pub open spec fn segment_u_max(s: Set<SegmentId>) -> int
-    decreases s.len() when s.finite()
+    decreases s.len()
 {
     if s.len() == 0 {
         0
@@ -216,7 +217,6 @@ pub open spec fn segment_u_max(s: Set<SegmentId>) -> int
 }
 
 proof fn segment_u_max_not_in(s: Set<SegmentId>)
-    requires s.finite(),
     ensures forall |id: SegmentId| s.contains(id) ==> id.uniq < segment_u_max(s) + 1,
     decreases s.len(),
 {
@@ -235,14 +235,13 @@ pub open spec fn segment_get_unused_uniq_field(s: Set<SegmentId>) -> int {
 }
 
 pub proof fn lemma_segment_get_unused_uniq_field(s: Set<SegmentId>)
-    requires s.finite(),
     ensures forall |id: SegmentId| s.contains(id) ==> id.uniq != segment_get_unused_uniq_field(s)
 {
     segment_u_max_not_in(s);
 }
 
 pub open spec fn heap_u_max(s: Set<HeapId>) -> int
-    decreases s.len() when s.finite()
+    decreases s.len()
 {
     if s.len() == 0 {
         0
@@ -253,7 +252,6 @@ pub open spec fn heap_u_max(s: Set<HeapId>) -> int
 }
 
 proof fn heap_u_max_not_in(s: Set<HeapId>)
-    requires s.finite(),
     ensures forall |id: HeapId| s.contains(id) ==> id.uniq < heap_u_max(s) + 1,
     decreases s.len(),
 {
@@ -272,15 +270,28 @@ pub open spec fn heap_get_unused_uniq_field(s: Set<HeapId>) -> int {
 }
 
 pub proof fn lemma_heap_get_unused_uniq_field(s: Set<HeapId>)
-    requires s.finite(),
     ensures forall |id: HeapId| s.contains(id) ==> id.uniq != heap_get_unused_uniq_field(s)
 {
     heap_u_max_not_in(s);
 }
 
-
+pub open spec fn all_thread_ids() -> Set<ThreadId> {
+    vstd::contrib::set_build!{ ThreadId { thread_id }: ThreadId | thread_id: u64 }
 }
 
+pub open spec fn range_block_ids(lo: nat, hi: nat, page_id: PageId, block_size: nat) -> Set<BlockId> {
+    vstd::contrib::set_build!{
+        BlockId {
+            page_id,
+            idx,
+            slice_idx: BlockId::get_slice_idx(page_id, idx, block_size),
+            block_size,
+        }: BlockId |
+        idx: nat in lo..hi,
+    }
+}
+
+}
 
 tokenized_state_machine!{ Mim {
     fields {
@@ -340,7 +351,7 @@ tokenized_state_machine!{ Mim {
         initialize() {
             init right_to_set_inst = true;
             init my_inst = Option::None;
-            init right_to_use_thread = Set::full();
+            init right_to_use_thread = all_thread_ids();
             init thread_local_state = Map::empty();
             init thread_checked_state = Map::empty();
             init block = Map::empty();
@@ -863,11 +874,7 @@ tokenized_state_machine!{ Mim {
             birds_eye let ssa = pre.segment_shared_access[page_id.segment_id];
             //let ssa = ts.segments[page_id.segment_id].shared_access;
             let block_map = Map::new(
-                |block_id: BlockId|
-                    block_id.page_id == page_id
-                      && old_num_blocks <= block_id.idx < new_num_blocks
-                      && block_id.block_size == block_size
-                      && block_id.slice_idx_is_right(),
+                range_block_ids(old_num_blocks, new_num_blocks, page_id, block_size),
                 |block_id: BlockId|
                   BlockState {
                       segment_shared_access: ssa,
@@ -904,7 +911,6 @@ tokenized_state_machine!{ Mim {
         ) {
             remove thread_local_state -= [ thread_id => let ts ];
             require ts.pages.dom().contains(page_id);
-            require blocks.dom().finite();
             require blocks.len() == ts.pages[page_id].num_blocks;
             require forall |block_id: BlockId| blocks.dom().contains(block_id) ==>
                 block_id.page_id == page_id;
@@ -966,7 +972,7 @@ tokenized_state_machine!{ Mim {
             //          ==> ts.pages[pid].offset != pid.idx - page_id.idx;
 
             let new_pages0 = Map::<PageId, PageState>::new(
-                |pid: PageId| page_id.range_from(0, n_slices as int).contains(pid),
+                page_id.range_from(0, n_slices as int),
                 |pid: PageId|
                     PageState {
                         is_enabled: false,
@@ -979,7 +985,7 @@ tokenized_state_machine!{ Mim {
             add thread_local_state += [ thread_id => ts2 ];
 
             let psa_map = Map::new(
-                |pid: PageId| page_id.range_from(0, n_slices as int).contains(pid),
+                page_id.range_from(0, n_slices as int),
                 |pid: PageId| ts.pages[pid].shared_access,
             );
             withdraw page_shared_access -= (psa_map)
@@ -1077,13 +1083,6 @@ tokenized_state_machine!{ Mim {
     }
 
     // Invariants
-
-    #[invariant]
-    pub closed spec fn inv_finite(&self) -> bool {
-        self.thread_of_segment.dom().finite()
-          && self.heap_shared_access.dom().finite()
-          && self.reserved_uniq.finite()
-    }
 
     #[invariant]
     pub closed spec fn inv_reserved(&self) -> bool {
@@ -1479,7 +1478,7 @@ tokenized_state_machine!{ Mim {
 
     proof fn block_map_with_len(blocks: Map<BlockId, BlockState>, page_id: PageId, len: int)
         requires
-            blocks.dom().finite(), blocks.len() >= len,
+            blocks.len() >= len,
             len >= 0,
             forall |block_id: BlockId| blocks.dom().contains(block_id) ==>
                 block_id.page_id == page_id && 0 <= block_id.idx < len,

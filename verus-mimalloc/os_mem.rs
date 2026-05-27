@@ -55,13 +55,11 @@ impl MemChunk {
     }
 
     pub open spec fn range_os_rw(&self) -> Set<int> {
-        Set::<int>::new(|addr| self.os.dom().contains(addr) && self.os[addr]@.mem_protect
-          == MemProtect { read: true, write: true })
+        self.os.dom().filter(|addr| self.os[addr]@.mem_protect == MemProtect { read: true, write: true })
     }
 
     pub open spec fn range_os_none(&self) -> Set<int> {
-        Set::<int>::new(|addr| self.os.dom().contains(addr) && self.os[addr]@.mem_protect
-          == MemProtect { read: false, write: false })
+        self.os.dom().filter(|addr| self.os[addr]@.mem_protect == MemProtect { read: false, write: false })
     }
 
     #[verifier::inline]

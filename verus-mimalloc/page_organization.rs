@@ -54,6 +54,11 @@ pub ghost enum Popped {
     ExtraCount(SegmentId),
 }
 
+// {page_id | page_id.segment_id == segment_id && lo <= page_id.idx < hi}
+pub open spec fn page_id_range(segment_id: SegmentId, lo: nat, hi: nat) -> Set<PageId> {
+    vstd::contrib::set_build!{ PageId { segment_id, idx }: PageId | idx: nat in lo..hi }
+}
+
 state_machine!{ PageOrg {
     fields {
         // Roughly corresponds to physical state
@@ -1189,8 +1194,7 @@ state_machine!{ PageOrg {
             require !pre.segments.dom().contains(segment_id);
 
             let new_pages = Map::new(
-                |page_id: PageId| page_id.segment_id == segment_id
-                    && 0 <= page_id.idx <= SLICES_PER_SEGMENT,
+                page_id_range(segment_id, 0, SLICES_PER_SEGMENT as nat + 1),
                 |page_id: PageId| PageData {
                     dlist_entry: None,
                     count: None,
@@ -1226,8 +1230,7 @@ state_machine!{ PageOrg {
                 );
 
             let changed_pages = Map::new(
-                |pid: PageId| pid.segment_id == page_id.segment_id &&
-                    page_id.idx <= pid.idx < page_id.idx + count,
+                page_id_range(page_id.segment_id, page_id.idx, page_id.idx + count as nat),
                 |pid: PageId| PageData {
                     count: if pid == page_id { Some(count as nat) } else { pre.pages[pid].count },
                     offset: Some((pid.idx - page_id.idx) as nat), // set offset
@@ -1273,8 +1276,7 @@ state_machine!{ PageOrg {
             assert pre.pages.dom().contains(page_id);
             assert count + page_id.idx <= SLICES_PER_SEGMENT;
             let changed_pages = Map::new(
-                |pid: PageId| pid.segment_id == segment_id &&
-                    0 <= pid.idx < count,
+                page_id_range(segment_id, 0, count as nat),
                 |pid: PageId| PageData {
                     count: if pid == page_id { Some(count as nat) } else { pre.pages[pid].count },
                     offset: Some((pid.idx - page_id.idx) as nat), // set offset
@@ -1431,8 +1433,7 @@ state_machine!{ PageOrg {
                 );
 
             let changed_pages = Map::new(
-                |pid: PageId| pid.segment_id == page_id.segment_id &&
-                    page_id.idx <= pid.idx < page_id.idx + count,
+                page_id_range(page_id.segment_id, page_id.idx, page_id.idx + count),
                 |pid: PageId| PageData {
                     is_used: true,
                     page_header_kind: if pid == page_id { Some(page_header_kind) } else { None },
@@ -1473,8 +1474,7 @@ state_machine!{ PageOrg {
                 );
 
             let changed_pages = Map::new(
-                |pid: PageId| pid.segment_id == page_id.segment_id &&
-                    page_id.idx <= pid.idx < page_id.idx + count,
+                page_id_range(page_id.segment_id, page_id.idx, page_id.idx + count),
                 |pid: PageId| PageData {
                     is_used: false,
                     page_header_kind: None,
@@ -1713,7 +1713,7 @@ state_machine!{ PageOrg {
             let last_id = PageId { segment_id, idx: (count - 1) as nat };
 
             let new_page_map = Map::<PageId, PageData>::new(
-                |page_id: PageId| page_id.segment_id == segment_id && 0 <= page_id.idx < count,
+                page_id_range(segment_id, 0, count),
                 |page_id: PageId| PageData {
                     dlist_entry: None,
                     count: None,
@@ -1738,8 +1738,7 @@ state_machine!{ PageOrg {
             update segments = pre.segments.remove(segment_id);
             update popped = Popped::No;
 
-            let keys = Set::<PageId>::new(
-                |page_id: PageId| page_id.segment_id == segment_id && 0 <= page_id.idx <= SLICES_PER_SEGMENT);
+            let keys = page_id_range(segment_id, 0, SLICES_PER_SEGMENT as nat + 1);
             update pages = pre.pages.remove_keys(keys);
         }
     }
@@ -3391,6 +3390,7 @@ state_machine!{ PageOrg {
         let p_count = pre.pages[page_id].count.unwrap();
         let sbin_idx = smallest_sbin_fitting_size(p_count as int);
         let list_idx = Self::get_list_idx(pre.unused_lists, page_id).1;
+assert(pre.pages.dom().contains(page_id)); // HACK: this just repeats information from pre.invariant() -- is there an instability?
         pre.unused_is_in_sbin(page_id);
         let dlist_entry = pre.pages[page_id].dlist_entry.unwrap();
 
