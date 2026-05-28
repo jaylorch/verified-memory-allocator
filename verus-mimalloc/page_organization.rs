@@ -3390,7 +3390,6 @@ state_machine!{ PageOrg {
         let p_count = pre.pages[page_id].count.unwrap();
         let sbin_idx = smallest_sbin_fitting_size(p_count as int);
         let list_idx = Self::get_list_idx(pre.unused_lists, page_id).1;
-assert(pre.pages.dom().contains(page_id)); // HACK: this just repeats information from pre.invariant() -- is there an instability?
         pre.unused_is_in_sbin(page_id);
         let dlist_entry = pre.pages[page_id].dlist_entry.unwrap();
 
