@@ -380,7 +380,7 @@ impl CommitMask {
         ensures
             other@ == self@.union(Set::range(0, 64).filter(|b: usize| is_bit_set(other.mask[i], b)).map(|b: usize| 64 * i + b)),
     {
-        let s_un = Set::range(0, 64).filter(|b: usize| b < 64 && is_bit_set(other.mask[i], b));
+        let s_un = Set::range(0, 64).filter(|b: usize| is_bit_set(other.mask[i], b));
         let f_un = |b: usize| 64 * i + b;
         let f = |t: (int, usize)| t.0 * 64 + t.1;
         let s_full = set_8_64().filter(|t: (int, usize)| is_bit_set(self.mask[t.0], t.1));
@@ -393,13 +393,15 @@ impl CommitMask {
         assert(s2 =~= Set::empty()) by { lemma_is_bit_set(); }
         lemma_map_distribute_auto::<(int,usize),int>();
         assert(s_full.map(f) =~= s1.map(f).union(s2.map(f)).union(s3.map(f)));
+        assert(self@ == s_full.map(f));
         assert(s_full_o =~= s_full.union(s2o));
+        assert(other@ == s_full_o.map(f));
         assert forall|x| #![auto] s_un.map(f_un).contains(x) implies s2o.map(f).contains(x) by {
             assert(s2o.contains((i, choose|y| s_un.contains(y) && f_un(y) == x)));
         };
         assert forall|x| #![auto] s2o.map(f).contains(x) implies s_un.map(f_un).contains(x) by {
             let y = choose|y| s2o.contains(y) && f(y) == x;
-            assert(Set::range(0, 64).filter(|b: usize| b < 64 && is_bit_set(other.mask[i], b)).contains(y.1));
+            assert(Set::range(0, 64).filter(|b: usize| is_bit_set(other.mask[i], b)).contains(y.1));
         };
         assert(s_un.map(f_un) =~= s2o.map(f));
     }
