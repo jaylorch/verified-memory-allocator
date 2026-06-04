@@ -174,50 +174,65 @@ fn os_commitx(
 
     let p = addr.with_addr(start);
 
-    let tracked weird_extra = mem.take_points_to_set(
-          mem.points_to.dom() - mem.os_rw_bytes().to_set().unwrap());
     let tracked mut exact_mem = mem.split(addr as int, size as int);
     let ghost em = exact_mem;
 
     if commit {
         mprotect_prot_read_write(p, csize, Tracked(&mut exact_mem));
+        proof {
+            mem.join(exact_mem);
+        }
     } else {
-        // TODO madvise?
+        // Take out points_to NOT in os_rw, so has_pointsto_for_all_read_write holds
+        let tracked weird_extra = exact_mem.take_points_to_set(
+              exact_mem.points_to.dom().filter(
+                  |x: int| !exact_mem.os_rw_bytes().contains(x)));
+
+        proof {
+            assert forall |a: int| exact_mem.range_os_rw().contains(a)
+                implies exact_mem.range_points_to().contains(a)
+            by {
+                assert(em.os.dom().contains(a));
+                assert(set_int_range(addr as int, addr as int + size as int).contains(a));
+                assert(old(mem).points_to.dom().contains(a));
+                assert(em.points_to.dom().contains(a));
+                assert(em.os_rw_bytes().contains(a));
+            }
+            assert(exact_mem.has_pointsto_for_all_read_write());
+        }
+
         mprotect_prot_none(p, csize, Tracked(&mut exact_mem));
+
+        proof {
+            exact_mem.give_points_to_range(weird_extra);
+            mem.join(exact_mem);
+
+            assert forall |a: int|
+                (old(mem).points_to.dom() - mem.points_to.dom()).contains(a)
+                <==> (old(mem).os_rw_bytes() - mem.os_rw_bytes()).contains(a)
+            by {
+                if (old(mem).points_to.dom() - mem.points_to.dom()).contains(a) {
+                    assert(vstd::set_lib::set_int_range(
+                        addr as int, addr as int + size as int).contains(a));
+                    assert(em.points_to.dom().contains(a));
+                    assert(em.os_rw_bytes().contains(a));
+                    assert(old(mem).os_rw_bytes().contains(a));
+                }
+                if (old(mem).os_rw_bytes() - mem.os_rw_bytes()).contains(a) {
+                    assert(old(mem).os.dom().contains(a));
+                    if !set_int_range(addr as int, addr as int + size as int).contains(a) {
+                        assert(mem.os_rw_bytes().contains(a));
+                    }
+                    assert(set_int_range(addr as int, addr as int + size as int).contains(a));
+                    assert(old(mem).points_to.dom().contains(a));
+                    assert(em.points_to.dom().contains(a));
+                    assert(em.os_rw_bytes().contains(a));
+                }
+            }
+        }
     }
 
     proof {
-        mem.join(exact_mem);
-        mem.give_points_to_range(weird_extra);
-        //assert( mem.os.dom() == old(mem).os.dom(),
-        if commit {
-        }
-        if !commit {
-            /*assert(em.points_to.dom()
-                =~= set_int_range(addr as int, addr + size as int));
-            assert(em.points_to.dom() - exact_mem.points_to.dom()
-                =~= set_int_range(addr as int, addr + size as int));
-
-            assert(exact_mem.range_os_rw().disjoint(exact_mem.range_os_none()));
-            assert(exact_mem.os_rw_bytes() =~= ISet::empty());
-
-            assert(em.os_rw_bytes() - exact_mem.os_rw_bytes()
-                =~= set_int_range(addr as int, addr + size as int));
-
-            assert(old(mem).points_to.dom() - mem.points_to.dom()
-                =~= set_int_range(addr as int, addr + size as int));
-            assert(old(mem).os_rw_bytes() - mem.os_rw_bytes()
-                =~= set_int_range(addr as int, addr + size as int));
-            */
-
-            assert(exact_mem.range_os_rw().disjoint(exact_mem.range_os_none()));
-            assert(exact_mem.os_rw_bytes() =~= ISet::empty());
-
-//assert(old(mem).points_to.dom().to_iset() - mem.points_to.dom().to_iset()
-//    =~= set_int_range(addr as int, addr as int + size as int));
-//assert(old(mem).os_rw_bytes() - mem.os_rw_bytes()
-//    =~= set_int_range(addr as int, addr as int + size as int));
-        }
         assert(mem.os.dom() =~= old(mem).os.dom());
     }
 

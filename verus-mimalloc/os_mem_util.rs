@@ -38,7 +38,6 @@ impl MemChunk {
     ) -> (tracked t: Self)
         ensures
             t.points_to.dom().to_iset() == old(self).points_to.dom().to_iset().intersect(set_int_range(start, start + len)),
-t.points_to.dom().to_iset() == old(self).points_to.dom().to_iset().intersect(set_int_range(start, start + len)),
             t.os == old(self).os.restrict(set_int_range(start, start + len)),
             self.points_to.dom() == old(self).points_to.dom().difference(vstd::set_lib::set_int_range(start, start + len)),
             self.os == old(self).os.remove_keys(set_int_range(start, start + len)),

@@ -245,22 +245,23 @@ fn segment_commitx(
     });
     
     proof {
-        let cm = local.segments[sid].main.value().commit_mask@;
-        let old_cm = old(local).segments[sid].main.value().commit_mask@;
-
         if commit {
-            assert(local.decommit_mask(sid).bytes(sid).subset_of( old(local).decommit_mask(sid).bytes(sid) ) && old(local).commit_mask(sid).bytes(sid).subset_of( local.commit_mask(sid).bytes(sid) )) by { reveal(CommitMask::bytes); }
-            assert((old(local).segments[sid].mem.os_rw_bytes() + (local.commit_mask(sid).bytes(sid) - old(local).commit_mask(sid).bytes(sid))).subset_of(local.segments[sid].mem.os_rw_bytes())) by { reveal(CommitMask::bytes); }
-            preserves_mem_chunk_good_on_commit_with_mask_set(*old(local), *local, sid);
-            assert(local.mem_chunk_good(sid));
-            assert forall |sid1| sid1 != sid && old(local).mem_chunk_good(sid1)
-                implies local.mem_chunk_good(sid1)
-            by {
-                preserves_mem_chunk_good_on_commit(*old(local), *local, sid1);
-            }
-            assert(local.unused_pages === old(local).unused_pages);
-            assert(local.page_organization === old(local).page_organization);
-            assert(local.wf_main());
+            assert(local.wf_main()) by {
+                let cm = local.segments[sid].main.value().commit_mask@;
+                let old_cm = old(local).segments[sid].main.value().commit_mask@;
+
+                assert(local.decommit_mask(sid).bytes(sid).subset_of( old(local).decommit_mask(sid).bytes(sid) ) && old(local).commit_mask(sid).bytes(sid).subset_of( local.commit_mask(sid).bytes(sid) )) by { reveal(CommitMask::bytes); }
+                assert((old(local).segments[sid].mem.os_rw_bytes() + (local.commit_mask(sid).bytes(sid) - old(local).commit_mask(sid).bytes(sid))).subset_of(local.segments[sid].mem.os_rw_bytes())) by { reveal(CommitMask::bytes); }
+                preserves_mem_chunk_good_on_commit_with_mask_set(*old(local), *local, sid);
+                assert(local.mem_chunk_good(sid));
+                assert forall |sid1| sid1 != sid && old(local).mem_chunk_good(sid1)
+                    implies local.mem_chunk_good(sid1)
+                by {
+                    preserves_mem_chunk_good_on_commit(*old(local), *local, sid1);
+                }
+                assert(local.unused_pages === old(local).unused_pages);
+                assert(local.page_organization === old(local).page_organization);
+            };
 
             assert forall |j: int| set_int_range(p as int, p + size).contains(j)
                 implies local.commit_mask(sid).bytes(sid).contains(j)
@@ -272,34 +273,50 @@ fn segment_commitx(
             }
             assert(set_int_range(p as int, p + size) <= local.commit_mask(segment.segment_id@).bytes(segment.segment_id@) - local.decommit_mask(segment.segment_id@).bytes(segment.segment_id@)) by { reveal(CommitMask::bytes); };
         } else {
-            assert forall |sid1| sid1 != sid && old(local).mem_chunk_good(sid1)
-                implies local.mem_chunk_good(sid1)
-            by {
-                preserves_mem_chunk_good_on_commit_with_mask_set(*old(local), *local, sid1);
-            }
+            assert(local.wf_main()) by {
+                assert forall |sid1| sid1 != sid && old(local).mem_chunk_good(sid1)
+                    implies local.mem_chunk_good(sid1)
+                by {
+                    preserves_mem_chunk_good_on_commit_with_mask_set(*old(local), *local, sid1);
+                }
 
-            let local1 = *old(local);
-            let local2 = *local;
-            assert(local2.commit_mask(sid).bytes(sid) =~=
-                local1.commit_mask(sid).bytes(sid) -
-                (local1.decommit_mask(sid).bytes(sid) - local2.decommit_mask(sid).bytes(sid)))
-            by {
-                reveal(CommitMask::bytes);
-            }
-            assert(local2.decommit_mask(sid).bytes(sid) <= local1.decommit_mask(sid).bytes(sid))
-            by {
-                reveal(CommitMask::bytes);
-            }
-            assert((local1.segments[sid].mem.os_rw_bytes() - local2.segments[sid].mem.os_rw_bytes())
-                <= (local1.decommit_mask(sid).bytes(sid) - local2.decommit_mask(sid).bytes(sid)))
-            by {
-                reveal(CommitMask::bytes);
-            }
+                let local1 = *old(local);
+                let local2 = *local;
+                assert(local2.commit_mask(sid).bytes(sid) =~=
+                    local1.commit_mask(sid).bytes(sid) -
+                    (local1.decommit_mask(sid).bytes(sid) - local2.decommit_mask(sid).bytes(sid)))
+                by {
+                    reveal(CommitMask::bytes);
+                }
+                assert(local2.decommit_mask(sid).bytes(sid) <= local1.decommit_mask(sid).bytes(sid))
+                by {
+                    reveal(CommitMask::bytes);
+                }
+                assert((local1.segments[sid].mem.os_rw_bytes() - local2.segments[sid].mem.os_rw_bytes())
+                    <= (local1.decommit_mask(sid).bytes(sid) - local2.decommit_mask(sid).bytes(sid)))
+                by {
+                    reveal(CommitMask::bytes);
+                }
 
-            preserves_mem_chunk_good_on_decommit(*old(local), *local, sid);
-            assert(local.mem_chunk_good(sid));
-            assert(local.unused_pages === old(local).unused_pages);
-            assert(local.page_organization === old(local).page_organization);
+                assert(local2.segments[sid].mem.os_rw_bytes() <= local1.segments[sid].mem.os_rw_bytes());
+                assert(local2.segments[sid].mem.points_to.dom().to_iset() =~=
+                    local1.segments[sid].mem.points_to.dom().to_iset() -
+                    (local1.segments[sid].mem.os_rw_bytes() - local2.segments[sid].mem.os_rw_bytes()))
+                by {
+                    assert_isets_equal!(
+                        local2.segments[sid].mem.points_to.dom().to_iset(),
+                        local1.segments[sid].mem.points_to.dom().to_iset() -
+                            (local1.segments[sid].mem.os_rw_bytes() - local2.segments[sid].mem.os_rw_bytes()),
+                        a => {
+                        }
+                    );
+                };
+
+                preserves_mem_chunk_good_on_decommit(*old(local), *local, sid);
+                assert(local.mem_chunk_good(sid));
+                assert(local.unused_pages === old(local).unused_pages);
+                assert(local.page_organization === old(local).page_organization);
+            };
 
             assert(local.wf_main());
         }
