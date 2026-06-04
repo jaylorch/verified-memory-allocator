@@ -3,10 +3,10 @@
 use core::intrinsics::{unlikely, likely};
 
 use vstd::prelude::*;
+use vstd::iset_lib::*;
 use vstd::raw_ptr::*;
 use vstd::*;
 use vstd::modes::*;
-use vstd::set_lib::*;
 use vstd::cell::pcell::*;
 use vstd::shared::Shared;
 
@@ -58,13 +58,13 @@ impl RightToUseThread {
 
 //impl Copy for Global { }
 
-pub proof fn global_init() -> (tracked res: (Global, Map<ThreadId, Mim::right_to_use_thread>))    // $line_count$Trusted$
+pub proof fn global_init() -> (tracked res: (Global, IMap<ThreadId, Mim::right_to_use_thread>))    // $line_count$Trusted$
     ensures // $line_count$Trusted$
         forall |tid: ThreadId| #[trigger] res.1.dom().contains(tid) // $line_count$Trusted$
           && res.0.wf_right_to_use_thread(res.1[tid], tid) // $line_count$Trusted$
 {
     let tracked (Tracked(instance), Tracked(right_to_set_inst), _, _, Tracked(rights), _, _, _, _, _, _, _, _) = Mim::Instance::initialize(
-        Map::tracked_empty(), Map::tracked_empty(), Map::tracked_empty(),
+        IMap::tracked_empty(), IMap::tracked_empty(), IMap::tracked_empty(),
         );
     let tracked my_inst = instance.set_inst(instance.id(), right_to_set_inst.tracked_unwrap());
     (Global { instance, my_inst }, rights.into_map())
@@ -205,8 +205,8 @@ pub fn heap_init(Tracked(global): Tracked<Global>, // $line_count$Trusted$
                 heap: HeapState {
                     shared_access: heap_shared_access,
                 },
-                segments: Map::empty(),
-                pages: Map::empty(),
+                segments: IMap::empty(),
+                pages: IMap::empty(),
             },
             &global.my_inst,
             right,
@@ -232,10 +232,10 @@ pub fn heap_init(Tracked(global): Tracked<Global>, // $line_count$Trusted$
         },
         tld_id: tld.tld_id@,
         tld: points_to_tld,
-        segments: Map::tracked_empty(),
-        pages: Map::tracked_empty(),
-        psa: Map::empty(),
-        unused_pages: Map::tracked_empty(),
+        segments: IMap::tracked_empty(),
+        pages: IMap::tracked_empty(),
+        psa: IMap::empty(),
+        unused_pages: IMap::tracked_empty(),
         page_organization,
         page_empty_global: page_empty_ptr_access,
     };
@@ -665,8 +665,8 @@ fn thread_data_alloc()
     }
 
     proof {
-        //assert(set_int_range(addr as int, addr as int + 4096) <= mc.range_os_rw());
-        //assert(set_int_range(addr as int, addr as int + 4096) <= mc.range_points_to());
+        //assert(ISet::<int>::range(addr as int, addr as int + 4096) <= mc.range_os_rw());
+        //assert(ISet::<int>::range(addr as int, addr as int + 4096) <= mc.range_points_to());
         //assert(SIZEOF_HEAP + SIZEOF_TLD < page_size());
         //assert(mc.pointsto_has_range(addr as int, SIZEOF_HEAP + SIZEOF_TLD));
     }

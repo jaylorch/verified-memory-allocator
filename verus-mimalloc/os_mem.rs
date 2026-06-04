@@ -1,6 +1,6 @@
 use vstd::prelude::*;
 use vstd::raw_ptr::*;
-use vstd::set_lib::*;
+use vstd::iset_lib::*;
 use libc::{PROT_NONE, PROT_READ, PROT_WRITE, MAP_PRIVATE, MAP_ANONYMOUS, MAP_NORESERVE};
 
 verus!{
@@ -33,7 +33,7 @@ pub ghost struct OsMemData {
 
 #[verus::trusted]
 pub tracked struct MemChunk {
-    pub os: Map<int, OsMem>,
+    pub os: IMap<int, OsMem>,
     pub points_to: PointsToRaw,
 }
 
@@ -50,23 +50,21 @@ impl MemChunk {
     }
 
     #[verifier::inline]
-    pub open spec fn range_os(&self) -> Set<int> {
+    pub open spec fn range_os(&self) -> ISet<int> {
         self.os.dom()
     }
 
-    pub open spec fn range_os_rw(&self) -> Set<int> {
-        Set::<int>::new(|addr| self.os.dom().contains(addr) && self.os[addr]@.mem_protect
-          == MemProtect { read: true, write: true })
+    pub open spec fn range_os_rw(&self) -> ISet<int> {
+        self.os.dom().filter(|addr| self.os[addr]@.mem_protect == MemProtect { read: true, write: true })
     }
 
-    pub open spec fn range_os_none(&self) -> Set<int> {
-        Set::<int>::new(|addr| self.os.dom().contains(addr) && self.os[addr]@.mem_protect
-          == MemProtect { read: false, write: false })
+    pub open spec fn range_os_none(&self) -> ISet<int> {
+        self.os.dom().filter(|addr| self.os[addr]@.mem_protect == MemProtect { read: false, write: false })
     }
 
     #[verifier::inline]
-    pub open spec fn range_points_to(&self) -> Set<int> {
-        self.points_to.dom()
+    pub open spec fn range_points_to(&self) -> ISet<int> {
+        self.points_to.dom().to_iset()
     }
 
     pub open spec fn has_pointsto_for_all_read_write(&self) -> bool {

@@ -86,7 +86,7 @@ impl MimDeallocInner {
             && md.inst() == self.mim_instance
         })
     {
-        let tracked (x, y) = points_to_raw.split(set_int_range(self.ptr as int, self.ptr as int + sz));
+        let tracked (x, y) = points_to_raw.split(Set::<int>::range(self.ptr as int, self.ptr as int + sz));
         let tracked md = MimDealloc { padding: y, _size: sz, inner: self };
         (md, x)
     }

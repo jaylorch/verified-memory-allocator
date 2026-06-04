@@ -39,10 +39,10 @@ verus!{
 //
 //   If the 'delay' state is in 'UseDelayedFree' (the unusual case):
 //
-//     Set 'delay' to Freeing
+//     ISet 'delay' to Freeing
 //     Follow the heap pointer to access the Heap
 //     Atomically add to the delayed free list.
-//     Set 'delay' to NoDelaying
+//     ISet 'delay' to NoDelaying
 //
 //     (The purpose of setting the 'Freeing' state is to ensure that the Heap remains
 //     valid while we perform this operation.)

@@ -22,7 +22,7 @@ pub open spec fn entry_inv(k: K, user_idx: int, g: G) -> bool {
       && g.has_pointsto_for_all_read_write()
 }
 
-pub open spec fn map_has_range(m: Map<int, G>, start: int, end: int, k: K) -> bool {
+pub open spec fn map_has_range(m: IMap<int, G>, start: int, end: int, k: K) -> bool {
     (forall |i| start <= i < end ==> m.dom().contains(i))
     && (forall |i| start <= i < end ==> entry_inv(k, i, #[trigger] m.index(i)))
 }
@@ -34,7 +34,7 @@ pub open spec fn map_has_range(m: Map<int, G>, start: int, end: int, k: K) -> bo
 
 struct_with_invariants!{
     pub struct Bitmap {
-        data: Vec<AtomicUsize<_, Map<int, G>, _>>,
+        data: Vec<AtomicUsize<_, IMap<int, G>, _>>,
         ghost k: K,
     }
 
@@ -49,7 +49,7 @@ struct_with_invariants!{
             forall |field_idx: int|
             where (0 <= field_idx < self.data@.len())
             specifically (self.data@.index(field_idx))
-            is (v: usize, gmap: Map<int, G>)
+            is (v: usize, gmap: IMap<int, G>)
         {
             forall |bitidx: int| 
                 ! #[trigger] has_bit(v, bitidx)
@@ -75,7 +75,7 @@ impl Bitmap {
     }
 
     pub fn bitmap_try_find_from_claim_across(&self, start_field_idx: usize, count: usize)
-        -> (res: (bool, usize, Tracked<Map<int, G>>))
+        -> (res: (bool, usize, Tracked<IMap<int, G>>))
     requires
         self.wf(),
         0 <= start_field_idx < self.len(),
@@ -94,7 +94,7 @@ impl Bitmap {
     }
 
     fn bitmap_try_find_from_claim(&self, start_field_idx: usize, count: usize)
-        -> (res: (bool, usize, Tracked<Map<int, G>>))
+        -> (res: (bool, usize, Tracked<IMap<int, G>>))
     requires
         self.wf(),
         0 <= start_field_idx < self.data@.len(),
@@ -131,11 +131,11 @@ impl Bitmap {
             idx = idx + 1;
         }
 
-        return (false, 0, Tracked(Map::tracked_empty()));
+        return (false, 0, Tracked(IMap::tracked_empty()));
     }
 
     fn bitmap_try_find_claim_field(&self, field_idx: usize, count: usize)
-        -> (res: (bool, usize, Tracked<Map<int, G>>))
+        -> (res: (bool, usize, Tracked<IMap<int, G>>))
     requires
         self.wf(),
         0 <= field_idx < self.data@.len(),
@@ -153,7 +153,7 @@ impl Bitmap {
 
         let mut map = atomic.load();
         if map == !(0usize) {
-            return (false, 0, Tracked(Map::tracked_empty()));
+            return (false, 0, Tracked(IMap::tracked_empty()));
         }
 
         assert((1usize << count) >= 1usize) by(bit_vector)
@@ -177,8 +177,8 @@ impl Bitmap {
         {
             let mapm = map & m;
             if mapm == 0 {
-                let tracked mut res_map: Map<int, G>;
-                proof { res_map = Map::tracked_empty(); }
+                let tracked mut res_map: IMap<int, G>;
+                proof { res_map = IMap::tracked_empty(); }
 
                 let newmap = map | m;
                 let res = my_atomic_with_ghost!(
@@ -188,7 +188,7 @@ impl Bitmap {
                     ghost gmap =>
                 {
                     if res.is_Ok() {
-                        let range = set_int_range(
+                        let range = ISet::<int>::range(
                             usize::BITS * field_idx + bitidx,
                             usize::BITS * field_idx + bitidx + count);
 
@@ -301,7 +301,7 @@ impl Bitmap {
             }
         }
 
-        return (false, 0, Tracked(Map::tracked_empty()));
+        return (false, 0, Tracked(IMap::tracked_empty()));
     }
         
 

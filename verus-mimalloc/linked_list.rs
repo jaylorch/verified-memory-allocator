@@ -5,7 +5,7 @@ use vstd::prelude::*;
 use vstd::raw_ptr::*;
 use vstd::modes::*;
 use vstd::*;
-use vstd::set_lib::*;
+use vstd::iset_lib::*;
 use vstd::layout::*;
 use vstd::atomic_ghost::*;
 
@@ -71,7 +71,7 @@ pub struct LL {
     data: Ghost<LLData>,
 
     // first to be popped off goes at the end
-    perms: Tracked<Map<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)>>,
+    perms: Tracked<IMap<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)>>,
 }
 
 pub tracked struct LLGhostStateToReconvene {
@@ -79,7 +79,7 @@ pub tracked struct LLGhostStateToReconvene {
     pub ghost page_id: PageId,
     pub ghost instance: Mim::Instance,
 
-    pub tracked map: Map<nat, (PointsToRaw, Mim::block)>,
+    pub tracked map: IMap<nat, (PointsToRaw, Mim::block)>,
 }
 
 impl LL {
@@ -194,7 +194,7 @@ impl LL {
             block_size_ge_word();
             block_ptr_aligned_to_word();
 
-            let tracked (m1, m2) = points_to_raw.split(set_int_range(ptr as int, ptr as int + size_of::<Node>() as int));
+            let tracked (m1, m2) = points_to_raw.split(Set::<int>::range(ptr as int, ptr as int + size_of::<Node>() as int));
             mem1 = m1.into_typed::<Node>(ptr.addr());
             mem2 = m2;
         }
@@ -447,11 +447,11 @@ impl LL {
             points_to.ptr() == ptr
               && points_to.opt_value() == MemContents::Init(Node { ptr: next })
 
-              && points_to_raw.dom() == perm.dom().difference(set_int_range(ptr as int, ptr as int + size_of::<Node>()))
+              && points_to_raw.dom() == perm.dom().difference(vstd::set_lib::set_int_range(ptr as int, ptr as int + size_of::<Node>()))
               && points_to_raw.provenance() == ptr@.provenance
         }),
     {
-        let tracked (points_to, rest) = perm.split(set_int_range(ptr as int, ptr as int + size_of::<Node>()));
+        let tracked (points_to, rest) = perm.split(vstd::set_lib::set_int_range(ptr as int, ptr as int + size_of::<Node>()));
         
         vstd::layout::layout_for_type_is_valid::<Node>(); // $line_count$Proof$
         let tracked mut points_to_node = points_to.into_typed::<Node>(ptr.addr());
@@ -479,7 +479,7 @@ impl LL {
             data: Ghost(LLData {
                 fixed_page, block_size, page_id, instance, len: 0, heap_id,
             }),
-            perms: Tracked(Map::tracked_empty()),
+            perms: Tracked(IMap::tracked_empty()),
         }
     }
 
@@ -614,13 +614,13 @@ impl LL {
             self.data@.len = self.data@.len + other.data@.len;
             other.data@.len = 0;
 
-            let tracked mut other_map = Map::tracked_empty();
+            let tracked mut other_map = IMap::tracked_empty();
             tracked_swap(other.perms.borrow_mut(), &mut other_map);
 
-            let tracked mut self_map = Map::tracked_empty();
+            let tracked mut self_map = IMap::tracked_empty();
             tracked_swap(self.perms.borrow_mut(), &mut self_map);
 
-            let key_map = Map::<nat, nat>::new(
+            let key_map = IMap::<nat, nat>::new(
                     |i: nat| self_len <= i < self_len + other_len,
                     |i: nat| (i - self_len) as nat,
                 );
@@ -690,7 +690,7 @@ impl LL {
         Ghost(extend): Ghost<nat>,  // spec we're extending to
 
         Tracked(points_to_raw_r): Tracked<&mut PointsToRaw>,
-        Tracked(tokens): Tracked<&mut Map<int, Mim::block>>,
+        Tracked(tokens): Tracked<&mut IMap<int, Mim::block>>,
     )
         requires
             old(self).wf(),
@@ -739,7 +739,7 @@ impl LL {
         // based on mi_page_free_list_extend
 
         let tracked mut points_to_raw = PointsToRaw::empty(start@.provenance);
-        let tracked mut new_map: Map<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)> = Map::tracked_empty();
+        let tracked mut new_map: IMap<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)> = IMap::tracked_empty();
         proof {
             tracked_swap(&mut points_to_raw, points_to_raw_r);
         }
@@ -803,8 +803,8 @@ impl LL {
 
             let next: *mut Node = start.with_addr(block + bsize) as *mut Node;
 
-            let tracked (points_to, rest) = points_to_raw.split(set_int_range(block as int, block as int + bsize as int));
-            let tracked (points_to1, points_to2) = points_to.split(set_int_range(block as int, block as int + size_of::<Node>() as int));
+            let tracked (points_to, rest) = points_to_raw.split(Set::<int>::range(block as int, block as int + bsize as int));
+            let tracked (points_to1, points_to2) = points_to.split(Set::<int>::range(block as int, block as int + size_of::<Node>() as int));
             vstd::layout::layout_for_type_is_valid::<Node>(); // $line_count$Proof$
             let tracked mut points_to_node = points_to1.into_typed::<Node>(block);
 
@@ -878,8 +878,8 @@ impl LL {
             }
         }
 
-        let tracked (points_to, rest) = points_to_raw.split(set_int_range(block as int, block as int + bsize as int));
-        let tracked (points_to1, points_to2) = points_to.split(set_int_range(block as int, block as int + size_of::<Node>() as int));
+        let tracked (points_to, rest) = points_to_raw.split(Set::<int>::range(block as int, block as int + bsize as int));
+        let tracked (points_to1, points_to2) = points_to.split(Set::<int>::range(block as int, block as int + size_of::<Node>() as int));
         proof { points_to_raw = rest; }
         vstd::layout::layout_for_type_is_valid::<Node>(); // $line_count$Proof$
         let tracked mut points_to_node = points_to1.into_typed::<Node>(block);
@@ -1003,7 +1003,7 @@ impl LL {
 
             let len = self.data@.len;
             self.data@.len = 0;
-            let tracked mut m = Map::tracked_empty();
+            let tracked mut m = IMap::tracked_empty();
             tracked_swap(&mut m, self.perms.borrow_mut());
 
             assert forall |i: nat| (#[trigger] m.dom().contains(i) <==> 0 <= i < len)
@@ -1039,12 +1039,12 @@ impl LL {
     }
 
     pub proof fn convene_pt_map(
-        tracked m: Map<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)>,
+        tracked m: IMap<nat, (PointsTo<Node>, PointsToRaw, Mim::block, IsExposed)>,
         len: nat,
         instance: Mim::Instance,
         page_id: PageId,
         block_size: nat,
-    ) -> (tracked m2: Map<nat, (PointsToRaw, Mim::block)>)
+    ) -> (tracked m2: IMap<nat, (PointsToRaw, Mim::block)>)
         requires
             forall |i: nat| (#[trigger] m.dom().contains(i) <==> 0 <= i < len)
               && (m.dom().contains(i) ==> ({
@@ -1077,8 +1077,8 @@ impl LL {
         decreases len,
     {
         if len == 0 {
-            let tracked m = Map::tracked_empty();
-            assert(m.dom() =~= Set::empty());
+            let tracked m = IMap::tracked_empty();
+            assert(m.dom() =~= ISet::empty());
             assert(m.len() == 0);
             m
         } else {
@@ -1107,7 +1107,7 @@ impl LL {
         tracked llgstr1: LLGhostStateToReconvene,
         tracked llgstr2: LLGhostStateToReconvene,
         n_blocks: int,
-    ) -> (tracked res: (PointsToRaw, Map<BlockId, Mim::block>))
+    ) -> (tracked res: (PointsToRaw, IMap<BlockId, Mim::block>))
         requires
             llgstr_wf(llgstr1),
             llgstr_wf(llgstr2),
@@ -1134,7 +1134,7 @@ impl LL {
         }})
     {
         let tracked llgstr = Self::llgstr_merge(llgstr1, llgstr2);
-        let idxmap = Map::<nat, nat>::new(
+        let idxmap = IMap::<nat, nat>::new(
             |p| llgstr.map.dom().contains(p),
             |p| llgstr.map[p].1.key().idx);
         if exists |p| llgstr.map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
@@ -1180,7 +1180,7 @@ impl LL {
     {
         let tracked LLGhostStateToReconvene { map: mut map1, .. } = llgstr1;
         let tracked LLGhostStateToReconvene { map: mut map2, .. } = llgstr2;
-        map2.tracked_map_keys_in_place(Map::<nat, nat>::new(
+        map2.tracked_map_keys_in_place(IMap::<nat, nat>::new(
             |k: nat| map1.len() <= k < map1.len() + map2.len(),
             |k: nat| (k - map1.len()) as nat,
         ));
@@ -1231,12 +1231,12 @@ impl LL {
     }
 
     pub proof fn reconvene_rec(
-        tracked m: Map<nat, (PointsToRaw, Mim::block)>,
+        tracked m: IMap<nat, (PointsToRaw, Mim::block)>,
         len: nat,
         instance: Mim::Instance,
         page_id: PageId,
         block_size: nat,
-    ) -> (tracked res: (PointsToRaw, Map<BlockId, Mim::block>))
+    ) -> (tracked res: (PointsToRaw, IMap<BlockId, Mim::block>))
         requires
             forall |j: nat| 0 <= j < len ==> #[trigger] has_idx(m, j),
             forall |i: nat|
@@ -1267,7 +1267,7 @@ impl LL {
         decreases len,
     {
         if len == 0 {
-            (PointsToRaw::empty(page_id.segment_id.provenance), Map::tracked_empty())
+            (PointsToRaw::empty(page_id.segment_id.provenance), IMap::tracked_empty())
         } else {
             let j = (len - 1) as nat;
             assert(has_idx(m, j));
@@ -1299,12 +1299,12 @@ impl LL {
     }
 }
 
-pub closed spec fn has_idx(map: Map<nat, (PointsToRaw, Mim::block)>, i: nat) -> bool {
+pub closed spec fn has_idx(map: IMap<nat, (PointsToRaw, Mim::block)>, i: nat) -> bool {
     exists |p: nat| map.dom().contains(p) && map[p].1.key().idx == i
 }
 
-pub open spec fn set_nat_range(lo: nat, hi: nat) -> Set<nat> {
-    Set::new(|i: nat| lo <= i && i < hi)
+pub open spec fn set_nat_range(lo: nat, hi: nat) -> ISet<nat> {
+    ISet::new(|i: nat| lo <= i && i < hi)
 }
 
 pub proof fn lemma_nat_range(lo: nat, hi: nat)
@@ -1317,7 +1317,7 @@ pub proof fn lemma_nat_range(lo: nat, hi: nat)
         hi - lo,
 {
     if lo == hi {
-        assert(set_nat_range(lo, hi) =~= Set::empty());
+        assert(set_nat_range(lo, hi) =~= ISet::empty());
     } else {
         lemma_nat_range(lo, (hi - 1) as nat);
         assert(set_nat_range(lo, (hi - 1) as nat).insert((hi - 1) as nat) =~= set_nat_range(lo, hi));
@@ -1376,7 +1376,7 @@ pub fn bound_on_2_lists(
         let n_blocks = thread_token.value().pages[ll1.page_id()].num_blocks;
         if ll1.len() + ll2.len() > n_blocks {
             let len = ll1.len();
-            let tracked mut m = Map::tracked_empty();
+            let tracked mut m = IMap::tracked_empty();
             tracked_swap(&mut m, ll1.perms.borrow_mut());
             assert forall |i: nat| (#[trigger] m.dom().contains(i) <==> 0 <= i < len)
             by {
@@ -1389,7 +1389,7 @@ pub fn bound_on_2_lists(
             let tracked llgstr1 = LLGhostStateToReconvene { map: map, block_size, page_id, instance };
 
             let len = ll2.len();
-            let tracked mut m = Map::tracked_empty();
+            let tracked mut m = IMap::tracked_empty();
             tracked_swap(&mut m, ll2.perms.borrow_mut());
             assert forall |i: nat| (#[trigger] m.dom().contains(i) <==> 0 <= i < len)
             by {
@@ -1404,7 +1404,7 @@ pub fn bound_on_2_lists(
             let tracked llgstr = LL::llgstr_merge(llgstr1, llgstr2);
             let tracked LLGhostStateToReconvene { map: mut map, .. } = llgstr;
 
-            let idxmap = Map::<nat, nat>::new(
+            let idxmap = IMap::<nat, nat>::new(
                 |p| map.dom().contains(p),
                 |p| map[p].1.key().idx);
             if exists |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
@@ -1448,7 +1448,7 @@ pub fn bound_on_1_lists(
         let n_blocks = thread_token.value().pages[ll1.page_id()].num_blocks;
         if ll1.len() > n_blocks {
             let len = ll1.len();
-            let tracked mut m = Map::tracked_empty();
+            let tracked mut m = IMap::tracked_empty();
             tracked_swap(&mut m, ll1.perms.borrow_mut());
 
             assert forall |i: nat| (#[trigger] m.dom().contains(i) <==> 0 <= i < len)
@@ -1461,7 +1461,7 @@ pub fn bound_on_1_lists(
 
             let tracked mut map = LL::convene_pt_map(m, len, instance, page_id, block_size);
 
-            let idxmap = Map::<nat, nat>::new(
+            let idxmap = IMap::<nat, nat>::new(
                 |p| map.dom().contains(p),
                 |p| map[p].1.key().idx);
             if exists |p| map.dom().contains(p) && !(0 <= idxmap[p] < n_blocks) {
@@ -1523,7 +1523,7 @@ impl ThreadLLSimple {
         Self {
             instance: Ghost(instance),
             heap_id: Ghost(heap_id),
-            atomic: AtomicPtr::new(Ghost((Ghost(instance), Ghost(heap_id))), core::ptr::null_mut(), Tracked(Tracked(LL { first: p, data: Ghost(LLData { fixed_page: false, block_size: arbitrary(), page_id: arbitrary(), instance, len: 0, heap_id: Some(heap_id), }), perms: Tracked(Map::tracked_empty()), })),),
+            atomic: AtomicPtr::new(Ghost((Ghost(instance), Ghost(heap_id))), core::ptr::null_mut(), Tracked(Tracked(LL { first: p, data: Ghost(LLData { fixed_page: false, block_size: arbitrary(), page_id: arbitrary(), instance, len: 0, heap_id: Some(heap_id), }), perms: Tracked(IMap::tracked_empty()), })),),
         }
     }
 
@@ -1625,7 +1625,7 @@ impl ThreadLLSimple {
                 let tracked new_ll = LL {
                     first: p,
                     data: Ghost(data),
-                    perms: Tracked(Map::tracked_empty()),
+                    perms: Tracked(IMap::tracked_empty()),
                 };
                 g = Tracked(new_ll);
             }
@@ -1812,7 +1812,7 @@ impl ThreadLLWithDelayBits {
         let tracked new_ll = LL {
             first: p,
             data: Ghost(data),
-            perms: Tracked(Map::tracked_empty()),
+            perms: Tracked(IMap::tracked_empty()),
         };
         atomic_with_ghost!(
             &self.atomic => no_op();
@@ -2061,7 +2061,7 @@ impl ThreadLLWithDelayBits {
                 let tracked new_ll = LL {
                     first: p,
                     data: Ghost(data),
-                    perms: Tracked(Map::tracked_empty()),
+                    perms: Tracked(IMap::tracked_empty()),
                 };
                 g = (emp_token, Some((delay, new_ll)));
 

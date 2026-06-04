@@ -1,12 +1,11 @@
 use core::intrinsics::{unlikely, likely};
 use vstd::prelude::*;
-use vstd::set_lib::*;
+use vstd::iset_lib::*;
 use vstd::raw_ptr::*;
 use crate::config::*;
 use crate::os_mem::*;
 use crate::layout::*;
 use crate::types::todo;
-use vstd::set_lib::set_int_range;
 
 
 verus!{
@@ -53,7 +52,7 @@ pub fn os_decommit(addr: *mut u8, size: usize, Tracked(mem): Tracked<&mut MemChu
         mem.os_rw_bytes().subset_of(old(mem).os_rw_bytes()),
         mem.points_to.provenance() == old(mem).points_to.provenance(),
 
-        old(mem).points_to.dom() - mem.points_to.dom()
+        old(mem).points_to.dom().to_iset() - mem.points_to.dom().to_iset()
             =~= old(mem).os_rw_bytes() - mem.os_rw_bytes(),
         old(mem).os_rw_bytes() - mem.os_rw_bytes()
             <= set_int_range(addr as int, addr as int + size),
@@ -76,7 +75,7 @@ pub fn os_decommit(addr: *mut u8, size: usize, Tracked(mem): Tracked<&mut MemChu
                 assert(old(mem).os_rw_bytes().contains(p));
             }
         }
-        assert_sets_equal!(old(mem).points_to.dom() - mem.points_to.dom(),
+        assert_isets_equal!(old(mem).points_to.dom().to_iset() - mem.points_to.dom().to_iset(),
             old(mem).os_rw_bytes() - mem.os_rw_bytes(),
             p =>
         {
@@ -161,8 +160,9 @@ fn os_commitx(
         commit ==> res.0 ==> mem.os_has_range_read_write(addr as int, size as int),
         !commit ==> mem.points_to.dom().subset_of(old(mem).points_to.dom()),
         !commit ==> mem.os_rw_bytes().subset_of(old(mem).os_rw_bytes()),
-        !commit ==> old(mem).points_to.dom() - mem.points_to.dom()
-                    =~= old(mem).os_rw_bytes() - mem.os_rw_bytes(),
+        !commit ==> (old(mem).points_to.dom() - mem.points_to.dom()).congruent(
+            old(mem).os_rw_bytes() - mem.os_rw_bytes()
+        ),
         mem.points_to.provenance() == old(mem).points_to.provenance()
 {
     let is_zero = false;
@@ -175,7 +175,7 @@ fn os_commitx(
     let p = addr.with_addr(start);
 
     let tracked weird_extra = mem.take_points_to_set(
-          mem.points_to.dom() - mem.os_rw_bytes());
+          mem.points_to.dom() - mem.os_rw_bytes().to_set().unwrap());
     let tracked mut exact_mem = mem.split(addr as int, size as int);
     let ghost em = exact_mem;
 
@@ -199,7 +199,7 @@ fn os_commitx(
                 =~= set_int_range(addr as int, addr + size as int));
 
             assert(exact_mem.range_os_rw().disjoint(exact_mem.range_os_none()));
-            assert(exact_mem.os_rw_bytes() =~= Set::empty());
+            assert(exact_mem.os_rw_bytes() =~= ISet::empty());
 
             assert(em.os_rw_bytes() - exact_mem.os_rw_bytes()
                 =~= set_int_range(addr as int, addr + size as int));
@@ -209,6 +209,14 @@ fn os_commitx(
             assert(old(mem).os_rw_bytes() - mem.os_rw_bytes()
                 =~= set_int_range(addr as int, addr + size as int));
             */
+
+            assert(exact_mem.range_os_rw().disjoint(exact_mem.range_os_none()));
+            assert(exact_mem.os_rw_bytes() =~= ISet::empty());
+
+//assert(old(mem).points_to.dom().to_iset() - mem.points_to.dom().to_iset()
+//    =~= set_int_range(addr as int, addr as int + size as int));
+//assert(old(mem).os_rw_bytes() - mem.os_rw_bytes()
+//    =~= set_int_range(addr as int, addr as int + size as int));
         }
         assert(mem.os.dom() =~= old(mem).os.dom());
     }

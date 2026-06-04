@@ -59,8 +59,8 @@ state_machine!{ PageOrg {
         // Roughly corresponds to physical state
         pub unused_dlist_headers: Seq<DlistHeader>,     // indices are sbin
         pub used_dlist_headers: Seq<DlistHeader>,       // indices are bin
-        pub pages: Map<PageId, PageData>,
-        pub segments: Map<SegmentId, SegmentData>,
+        pub pages: IMap<PageId, PageData>,
+        pub segments: IMap<SegmentId, SegmentData>,
 
         // Actor state
         pub popped: Popped,
@@ -972,8 +972,8 @@ state_machine!{ PageOrg {
                 |i| DlistHeader { first: None, last: None });
             init used_dlist_headers = Seq::new((BIN_FULL + 1) as nat,
                 |i| DlistHeader { first: None, last: None });
-            init pages = Map::empty();
-            init segments = Map::empty();
+            init pages = IMap::empty();
+            init segments = IMap::empty();
             init popped = Popped::No;
 
             // TODO internals
@@ -1188,7 +1188,7 @@ state_machine!{ PageOrg {
             require pre.popped == Popped::No;
             require !pre.segments.dom().contains(segment_id);
 
-            let new_pages = Map::new(
+            let new_pages = IMap::new(
                 |page_id: PageId| page_id.segment_id == segment_id
                     && 0 <= page_id.idx <= SLICES_PER_SEGMENT,
                 |page_id: PageId| PageData {
@@ -1225,7 +1225,7 @@ state_machine!{ PageOrg {
                     ==> !pre.pages[pid].is_used
                 );
 
-            let changed_pages = Map::new(
+            let changed_pages = IMap::new(
                 |pid: PageId| pid.segment_id == page_id.segment_id &&
                     page_id.idx <= pid.idx < page_id.idx + count,
                 |pid: PageId| PageData {
@@ -1272,7 +1272,7 @@ state_machine!{ PageOrg {
             let page_id = PageId { segment_id, idx: 0 };
             assert pre.pages.dom().contains(page_id);
             assert count + page_id.idx <= SLICES_PER_SEGMENT;
-            let changed_pages = Map::new(
+            let changed_pages = IMap::new(
                 |pid: PageId| pid.segment_id == segment_id &&
                     0 <= pid.idx < count,
                 |pid: PageId| PageData {
@@ -1430,7 +1430,7 @@ state_machine!{ PageOrg {
                         && pre.pages[pid].offset.unwrap() == pid.idx - page_id.idx
                 );
 
-            let changed_pages = Map::new(
+            let changed_pages = IMap::new(
                 |pid: PageId| pid.segment_id == page_id.segment_id &&
                     page_id.idx <= pid.idx < page_id.idx + count,
                 |pid: PageId| PageData {
@@ -1472,7 +1472,7 @@ state_machine!{ PageOrg {
                         && pre.pages[pid].offset.unwrap() == pid.idx - page_id.idx
                 );
 
-            let changed_pages = Map::new(
+            let changed_pages = IMap::new(
                 |pid: PageId| pid.segment_id == page_id.segment_id &&
                     page_id.idx <= pid.idx < page_id.idx + count,
                 |pid: PageId| PageData {
@@ -1712,7 +1712,7 @@ state_machine!{ PageOrg {
 
             let last_id = PageId { segment_id, idx: (count - 1) as nat };
 
-            let new_page_map = Map::<PageId, PageData>::new(
+            let new_page_map = IMap::<PageId, PageData>::new(
                 |page_id: PageId| page_id.segment_id == segment_id && 0 <= page_id.idx < count,
                 |page_id: PageId| PageData {
                     dlist_entry: None,
@@ -1738,7 +1738,7 @@ state_machine!{ PageOrg {
             update segments = pre.segments.remove(segment_id);
             update popped = Popped::No;
 
-            let keys = Set::<PageId>::new(
+            let keys = ISet::<PageId>::new(
                 |page_id: PageId| page_id.segment_id == segment_id && 0 <= page_id.idx <= SLICES_PER_SEGMENT);
             update pages = pre.pages.remove_keys(keys);
         }
@@ -5070,7 +5070,7 @@ pub open spec fn get_prev(ll: Seq<PageId>, j: int) -> Option<PageId> {
     }
 }
 
-pub open spec fn valid_ll_i(pages: Map<PageId, PageData>, ll: Seq<PageId>, j: int) -> bool {
+pub open spec fn valid_ll_i(pages: IMap<PageId, PageData>, ll: Seq<PageId>, j: int) -> bool {
     0 <= j < ll.len()
       && pages.dom().contains(ll[j])
       && pages[ll[j]].dlist_entry.is_some()
@@ -5078,7 +5078,7 @@ pub open spec fn valid_ll_i(pages: Map<PageId, PageData>, ll: Seq<PageId>, j: in
       && pages[ll[j]].dlist_entry.unwrap().next == get_next(ll, j)
 }
 
-pub open spec fn valid_ll(pages: Map<PageId, PageData>, header: DlistHeader, ll: Seq<PageId>) -> bool {
+pub open spec fn valid_ll(pages: IMap<PageId, PageData>, header: DlistHeader, ll: Seq<PageId>) -> bool {
     &&& (match header.first {
         Some(first_id) => ll.len() != 0 && ll[0] == first_id,
         None => ll.len() == 0,

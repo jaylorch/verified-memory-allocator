@@ -299,8 +299,8 @@ fn page_free_list_extend(
     );
     let tracked block_tokens = block_tokens.into_map();
     proof { local.thread_token = _thread_token; local.checked_token = _checked_token; }
-    let tracked mut block_tokens = Map::tracked_map_keys(block_tokens,
-        Map::<int, BlockId>::new(
+    let tracked mut block_tokens = IMap::tracked_map_keys(block_tokens,
+        IMap::<int, BlockId>::new(
           |i: int| cap_nat <= i < cap_nat + extend_nat,
           |i: int| BlockId {
               page_id: page_ptr.page_id@,

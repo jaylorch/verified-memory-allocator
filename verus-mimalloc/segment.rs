@@ -5,10 +5,9 @@ use core::intrinsics::{unlikely, likely};
 use vstd::prelude::*;
 use vstd::raw_ptr::*;
 use vstd::*;
+use vstd::iset_lib::*;
 use vstd::modes::*;
-use vstd::set_lib::*;
 use vstd::pervasive::*;
-use vstd::set_lib::*;
 use vstd::cell::pcell::*;
 use vstd::atomic_ghost::*;
 
@@ -770,7 +769,7 @@ fn segment_span_allocate(
         //assert(inner.xblock_size != 0);
     });
 
-    // Set up the remaining pages
+    // ISet up the remaining pages
     let mut i: usize = 1;
     let ghost local_snapshot = *local;
     let extra = slice_count - 1;
@@ -822,7 +821,7 @@ fn segment_span_allocate(
         ptr_mut_write(this_slice.page_ptr, Tracked(&mut this_psa.points_to), page);
         proof {
             local.unused_pages.tracked_insert(this_page_id, this_psa);
-            assert_sets_equal!(local.unused_pages.dom() == prelocal.unused_pages.dom());
+            assert_isets_equal!(local.unused_pages.dom() == prelocal.unused_pages.dom());
         }
 
         i = i + 1;
@@ -1050,8 +1049,8 @@ fn segment_alloc(
     ) as *mut Page;
     //assert(i * SIZEOF_PAGE_HEADER == 0);
     let ghost old_mem_chunk = mem_chunk;
-    let tracked mut psa_map = Map::<PageId, PageSharedAccess>::tracked_empty();
-    let tracked mut pla_map = Map::<PageId, PageLocalAccess>::tracked_empty();
+    let tracked mut psa_map = IMap::<PageId, PageSharedAccess>::tracked_empty();
+    let tracked mut pla_map = IMap::<PageId, PageLocalAccess>::tracked_empty();
     //assert(segment_ptr.segment_ptr@.provenance == segment_ptr.segment_id@.provenance);
     while i <= SLICES_PER_SEGMENT as usize
         invariant mem_chunk.os == old_mem_chunk.os,
@@ -1060,8 +1059,8 @@ fn segment_alloc(
             //  COMMIT_SIZE - (SIZEOF_SEGMENT_HEADER + i * SIZEOF_PAGE_HEADER)),
             set_int_range(
                     segment_start(segment_id) + SIZEOF_SEGMENT_HEADER,
-                    segment_start(segment_id) + COMMIT_SIZE) <= old_mem_chunk.points_to.dom(),
-            mem_chunk.points_to.dom() =~= old_mem_chunk.points_to.dom() - 
+                    segment_start(segment_id) + COMMIT_SIZE) <= old_mem_chunk.points_to.dom().to_iset(),
+            mem_chunk.points_to.dom().to_iset() =~= old_mem_chunk.points_to.dom().to_iset() - 
                 set_int_range(
                     segment_start(segment_id),
                     segment_start(segment_id) + SIZEOF_SEGMENT_HEADER + i * SIZEOF_PAGE_HEADER
@@ -1221,7 +1220,7 @@ fn segment_alloc(
                 ssa);
         local.thread_token = thread_state_tok;
 
-        ////////// Set up pages and stuff
+        ////////// ISet up pages and stuff
 
         local.page_organization = PageOrg::take_step::create_segment(local.page_organization, segment_id);
 
@@ -1366,7 +1365,7 @@ fn segment_os_alloc(
             &&& set_int_range(segment_start(segment_ptr.segment_id@),
                     segment_start(segment_ptr.segment_id@) + COMMIT_SIZE).subset_of( pcommit_mask.bytes(segment_ptr.segment_id@) )
             &&& pcommit_mask.bytes(segment_ptr.segment_id@).subset_of(mem_chunk@.os_rw_bytes())
-            &&& mem_chunk@.os_rw_bytes().subset_of(mem_chunk@.points_to.dom())
+            &&& mem_chunk@.os_rw_bytes().subset_of(mem_chunk@.points_to.dom().to_iset())
         })
         }
     })
@@ -1467,7 +1466,7 @@ fn segment_os_alloc(
         by {
             reveal(CommitMask::bytes);
         }
-        assert(mem.os_rw_bytes().subset_of(mem.points_to.dom()));
+        assert(mem.os_rw_bytes().subset_of(mem.points_to.dom().to_iset()));
     }
 
     return (segment, psegment_slices, pre_size, pinfo_slices, is_zero, pcommit, mem_id, mem_large, is_pinned, align_offset, Tracked(mem));
@@ -1698,7 +1697,7 @@ fn segment_span_free(
         local.page_organization = next_state;
         local.psa = local.psa.union_prefer_right(local.unused_pages);
 
-        assert_sets_equal!(local.page_organization.pages.dom(), local.pages.dom());
+        assert_isets_equal!(local.page_organization.pages.dom(), local.pages.dom());
         preserves_mem_chunk_good(local_snap, *local);
 
         /*
@@ -1818,7 +1817,7 @@ fn segment_page_clear(page: PagePtr, tld: TldPtr, Tracked(local): Tracked<&mut L
     let tracked psa_map;
     proof {
         let tracked thread_state_tok = local.take_thread_token();
-        let block_state_map = Map::new(
+        let block_state_map = IMap::new(
             |block_id: BlockId| block_tokens.dom().contains(block_id),
             |block_id: BlockId| block_tokens[block_id].value(),
         );

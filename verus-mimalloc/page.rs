@@ -286,7 +286,7 @@ fn page_init(heap_ptr: HeapPtr, page_ptr: PagePtr, block_size: usize, tld_ptr: T
         assert(local.page_organization.pages.dom().contains(pid));
         assert(local.page_organization.pages[pid].is_used == false);
     }
-    let ghost new_page_state_map = Map::new(
+    let ghost new_page_state_map = IMap::new(
             |pid: PageId| range.contains(pid),
             |pid: PageId| PageState {
                 offset: pid.idx - page_id.idx,
@@ -383,7 +383,7 @@ fn page_init(heap_ptr: HeapPtr, page_ptr: PagePtr, block_size: usize, tld_ptr: T
 
     proof {
         let tracked new_psa_map = local.unused_pages.tracked_remove_keys(range);
-        let ghost new_page_state_map2 = Map::new(
+        let ghost new_page_state_map2 = IMap::new(
             |pid: PageId| range.contains(pid),
             |pid: PageId| PageState {
                 //offset: pid.idx - page_id.idx,

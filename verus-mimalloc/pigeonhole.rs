@@ -7,7 +7,7 @@ use vstd::assert_by_contradiction;
 verus!{
 
 // TODO: This belongs in set_lib
-proof fn singleton_set_unique_elt<T>(s: Set<T>, a:T, b:T)
+proof fn singleton_set_unique_elt<T>(s: ISet<T>, a:T, b:T)
     requires
         s.finite(),
         s.len() == 1,
@@ -23,7 +23,7 @@ proof fn singleton_set_unique_elt<T>(s: Set<T>, a:T, b:T)
     });
 }
 
-proof fn set_mismatch(s1:Set<nat>, s2:Set<nat>, missing:nat)
+proof fn set_mismatch(s1:ISet<nat>, s2:ISet<nat>, missing:nat)
     requires
         s1.finite(),
         s2.finite(),
@@ -51,12 +51,12 @@ proof fn set_mismatch(s1:Set<nat>, s2:Set<nat>, missing:nat)
     }
 }
 
-/* TODO: These next two should be derived from the set_int_range and lemma_int_range in 
+/* TODO: These next two should be derived from the ISet::<int>::range and lemma_int_range in 
  *       set_lib.rs, but it's surprisingly painful to do so */
 
 /// Creates a finite set of nats in the range [lo, hi).
-pub open spec fn set_nat_range(lo: nat, hi: nat) -> Set<nat> {
-    Set::new(|i: nat| lo <= i && i < hi)
+pub open spec fn set_nat_range(lo: nat, hi: nat) -> ISet<nat> {
+    ISet::new(|i: nat| lo <= i && i < hi)
 }
 
 /// If a set solely contains nats in the range [a, b), then its size is
@@ -71,7 +71,7 @@ pub proof fn lemma_nat_range(lo: nat, hi: nat)
         hi - lo,
 {
     if lo == hi {
-        assert(set_nat_range(lo, hi) =~= Set::empty());
+        assert(set_nat_range(lo, hi) =~= ISet::empty());
     } else {
         lemma_nat_range(lo, (hi - 1) as nat);
         assert(set_nat_range(lo, (hi - 1) as nat).insert((hi - 1) as nat) =~= set_nat_range(lo, hi));
@@ -79,7 +79,7 @@ pub proof fn lemma_nat_range(lo: nat, hi: nat)
 }
 
 
-proof fn nat_set_size(s:Set<nat>, bound:nat)
+proof fn nat_set_size(s:ISet<nat>, bound:nat)
     requires
         forall |i: nat| (0 <= i < bound <==> s.contains(i)),
     ensures
@@ -94,10 +94,10 @@ proof fn nat_set_size(s:Set<nat>, bound:nat)
         
 
 pub proof fn pigeonhole_missing_idx_implies_double_helper(
-    m: Map<nat, nat>,
+    m: IMap<nat, nat>,
     missing: nat,
     len: nat,
-    prev_vals: Set<nat>,
+    prev_vals: ISet<nat>,
     k: nat,
 ) -> (dup2: nat)
     requires
@@ -144,7 +144,7 @@ pub proof fn pigeonhole_missing_idx_implies_double_helper(
 }
 
 pub proof fn pigeonhole_missing_idx_implies_double(
-    m: Map<nat, nat>,
+    m: IMap<nat, nat>,
     missing: nat,
     len: nat,
 ) -> (r: (nat, nat))
@@ -168,13 +168,13 @@ pub proof fn pigeonhole_missing_idx_implies_double(
             assert(m[0] != missing);
         }
     };
-    let dup2 = pigeonhole_missing_idx_implies_double_helper(m, missing, len, Set::empty(), 0);
+    let dup2 = pigeonhole_missing_idx_implies_double_helper(m, missing, len, ISet::empty(), 0);
     let dup1 = choose |dup1| #![auto] dup1 != dup2 && m.dom().contains(dup1) && 0 <= dup1 < len && m[dup1] == m[dup2];
     (dup1, dup2)
 }
 
 pub proof fn pigeonhole_too_many_elements_implies_double(
-    m: Map<nat, nat>,
+    m: IMap<nat, nat>,
     len: nat,
 ) -> (r: (nat, nat))
     requires

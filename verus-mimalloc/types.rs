@@ -635,15 +635,15 @@ pub tracked struct Local {
     pub ghost tld_id: TldId,
     pub tracked tld: raw_ptr::PointsTo<Tld>,
 
-    pub tracked segments: Map<SegmentId, SegmentLocalAccess>,
+    pub tracked segments: IMap<SegmentId, SegmentLocalAccess>,
 
     // All pages, used and unused
-    pub tracked pages: Map<PageId, PageLocalAccess>,
-    pub ghost psa: Map<PageId, PageSharedAccess>,
+    pub tracked pages: IMap<PageId, PageLocalAccess>,
+    pub ghost psa: IMap<PageId, PageSharedAccess>,
 
     // All unused pages
     // (used pages are in the token system)
-    pub tracked unused_pages: Map<PageId, PageSharedAccess>,
+    pub tracked unused_pages: IMap<PageId, PageSharedAccess>,
 
     pub ghost page_organization: PageOrg::State,
 
@@ -883,9 +883,9 @@ pub open spec fn page_organization_used_queues_match(
 
 
 pub open spec fn page_organization_pages_match(
-    org_pages: Map<PageId, PageData>,
-    pages: Map<PageId, PageLocalAccess>,
-    psa: Map<PageId, PageSharedAccess>,
+    org_pages: IMap<PageId, PageData>,
+    pages: IMap<PageId, PageLocalAccess>,
+    psa: IMap<PageId, PageSharedAccess>,
     popped: Popped,
 ) -> bool {
     &&& org_pages.dom() =~= pages.dom()
@@ -963,8 +963,8 @@ pub open spec fn page_organization_pages_match_data(
 }
 
 pub open spec fn page_organization_segments_match(
-    org_segments: Map<SegmentId, SegmentData>,
-    segments: Map<SegmentId, SegmentLocalAccess>,
+    org_segments: IMap<SegmentId, SegmentData>,
+    segments: IMap<SegmentId, SegmentLocalAccess>,
 ) -> bool {
     org_segments.dom() =~= segments.dom()
     && (forall |segment_id: SegmentId| segments.dom().contains(segment_id) ==>
