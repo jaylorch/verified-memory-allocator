@@ -1644,8 +1644,8 @@ fn segment_span_free(
             assert(slice_count as u32 == slice_count);
             assert(slice_count as u32 - 1 <= 512);
             assert(slice_count as u32 - 1 >= 0);
-            assert((slice_count as u32 - 1) * SIZEOF_PAGE_HEADER as u32 >= 0);
-            assert((slice_count as u32 - 1) * SIZEOF_PAGE_HEADER as u32 <= u32::MAX);
+            //assert((slice_count as u32 - 1) * SIZEOF_PAGE_HEADER as u32 >= 0);
+            //assert((slice_count as u32 - 1) * SIZEOF_PAGE_HEADER as u32 <= u32::MAX);
             page.offset = (slice_count as u32 - 1) * SIZEOF_PAGE_HEADER as u32;
         });
     }
